@@ -1,0 +1,6 @@
+google-generativeai>=0.3.0
+requests>=2.25.1
+beautifulsoup4>=4.9.3
+python-dotenv>=0.15.0
+httpx>=0.21.0
+playwright>=1.35.0
