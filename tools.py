@@ -99,6 +99,106 @@ class Tool(ABC):
         pass
 
 
+class FileCreationTool(Tool):
+    """Tool for creating files in the OUTPUTS directory."""
+    
+    @property
+    def name(self) -> str:
+        return "create_file"
+    
+    @property
+    def description(self) -> str:
+        return "Create a file with the given content in the OUTPUTS directory."
+    
+    def execute(self, filename: str, content: str, file_type: Optional[str] = None) -> Dict[str, Any]:
+        """Create a file with the given content in the OUTPUTS directory.
+        
+        Args:
+            filename: The name of the file to create (without extension if file_type is provided)
+            content: The content to write to the file
+            file_type: Optional file type/extension (without the dot)
+        
+        Returns:
+            A dictionary with the status of the operation and the path to the created file
+        """
+        logger.info(f"Creating file: {filename} with type {file_type or 'unspecified'}")
+        
+        try:
+            # Create the OUTPUTS directory if it doesn't exist
+            outputs_dir = "OUTPUTS"
+            if not os.path.exists(outputs_dir):
+                os.makedirs(outputs_dir)
+                logger.info(f"Created OUTPUTS directory: {os.path.abspath(outputs_dir)}")
+            
+            # Clean the filename to ensure it's valid
+            clean_filename = self._sanitize_filename(filename)
+            
+            # Add the file extension if provided
+            if file_type:
+                # Remove any leading dots from the file_type
+                clean_file_type = file_type.lstrip('.')
+                final_filename = f"{clean_filename}.{clean_file_type}"
+            else:
+                # If no file_type is provided, use the filename as is
+                # (assuming it already has an extension)
+                final_filename = clean_filename
+                
+                # Check if the filename has an extension, add .txt if not
+                if '.' not in final_filename:
+                    final_filename = f"{final_filename}.txt"
+                    logger.info(f"No extension provided, adding .txt")
+            
+            # Create the full file path
+            file_path = os.path.join(outputs_dir, final_filename)
+            
+            # Check if the file already exists
+            if os.path.exists(file_path):
+                # Add a timestamp to make the filename unique
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                name_part, ext_part = os.path.splitext(final_filename)
+                final_filename = f"{name_part}_{timestamp}{ext_part}"
+                file_path = os.path.join(outputs_dir, final_filename)
+                logger.info(f"File already exists, creating with timestamp: {final_filename}")
+            
+            # Write the content to the file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"File created successfully: {file_path}")
+            
+            return {
+                "status": "success",
+                "message": f"File created successfully: {final_filename}",
+                "file_path": file_path,
+                "file_name": final_filename
+            }
+            
+        except Exception as e:
+            error_msg = f"Error creating file: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    def _sanitize_filename(self, filename: str) -> str:
+        """Remove invalid characters from a filename."""
+        # Replace invalid characters with underscores
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        
+        # Trim whitespace
+        filename = filename.strip()
+        
+        # Use a default name if the filename is empty after cleaning
+        if not filename:
+            filename = f"generated_file_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            logger.info(f"Empty filename after sanitization, using default: {filename}")
+        
+        return filename
+
+
 class PlaywrightScreenshotTool:
     """Helper class to take screenshots with Playwright."""
     
@@ -595,7 +695,6 @@ class RequestsWebSearchTool(Tool):
         
         return "\n".join(filtered_lines)
 
-# Existing WebSearchTool class remains for compatibility, but we won't use it
 
 class ToolRegistry:
     """Registry for tools that can be used by the agent."""

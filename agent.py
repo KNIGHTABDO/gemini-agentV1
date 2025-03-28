@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 import time
 import random
 from typing import Dict, List, Any, Optional, Tuple
@@ -8,7 +9,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ServerError, APIError
 
-from tools import ToolRegistry, RequestsWebSearchTool  # Changed import here
+from tools import ToolRegistry, RequestsWebSearchTool, FileCreationTool  # Added import for FileCreationTool
 
 # Configure logging - only log to file by default, not to console
 file_handler = logging.FileHandler("agent_debug.log")
@@ -42,8 +43,9 @@ class Agent:
         self.retry_delay = 2  # seconds
         self.debug_mode = False  # New attribute to control debug output
         
-        # Register the requests-based web search tool instead of the Playwright one
+        # Register tools
         self.tool_registry.register_tool(RequestsWebSearchTool())
+        self.tool_registry.register_tool(FileCreationTool())  # Register the new file creation tool
     
     def toggle_debug_mode(self) -> str:
         """Toggle debug mode on/off and update logger configuration."""
@@ -206,6 +208,84 @@ class Agent:
                         logger.info(f"Extracted implied search query: {search_query}")
                         break
         
+        # NEW: Check for file creation patterns in the response when we have code blocks
+        if not tool_requests and "```" in response:
+            # Look for code blocks
+            code_blocks = re.findall(r"```(\w*)\n(.*?)```", response, re.DOTALL)
+            
+            if code_blocks:
+                # We found at least one code block
+                for language, code_content in code_blocks:
+                    # Determine the file type based on language
+                    file_type = "txt"  # Default
+                    if language:
+                        lang = language.strip().lower()
+                        # Map common language tags to file extensions
+                        lang_to_ext = {
+                            "python": "py", "py": "py",
+                            "javascript": "js", "js": "js",
+                            "typescript": "ts", "ts": "ts",
+                            "html": "html",
+                            "css": "css",
+                            "java": "java",
+                            "c": "c",
+                            "cpp": "cpp", "c++": "cpp",
+                            "csharp": "cs", "c#": "cs",
+                            "php": "php",
+                            "ruby": "rb",
+                            "go": "go",
+                            "rust": "rs",
+                            "markdown": "md",
+                            "json": "json",
+                            "xml": "xml",
+                            "sql": "sql",
+                            "bash": "sh", "shell": "sh"
+                        }
+                        file_type = lang_to_ext.get(lang, lang)
+                    
+                    # Determine a suitable filename
+                    filename = "generated_code"
+                    
+                    # Try to extract a better filename from context
+                    # Look for common patterns like "Save this as" or "filename:" in the text
+                    filename_patterns = [
+                        r"save (?:this|the code) (?:as|to) [\"']?([a-zA-Z0-9_\-.]+\.\w+)[\"']?",
+                        r"filename:? ?[\"']?([a-zA-Z0-9_\-.]+\.\w+)[\"']?",
+                        r"create (?:a|the) file [\"']?([a-zA-Z0-9_\-.]+\.\w+)[\"']?",
+                        r"# ([a-zA-Z0-9_\-.]+\.\w+)"  # Check for a filename in a Python comment
+                    ]
+                    
+                    for pattern in filename_patterns:
+                        match = re.search(pattern, response, re.IGNORECASE)
+                        if match:
+                            filename = match.group(1)
+                            break
+                    
+                    # If we found a filename with extension, use that and don't specify file_type
+                    if "." in filename:
+                        logger.info(f"Creating file with detected filename: {filename}")
+                        tool_requests.append({
+                            "tool_name": "create_file",
+                            "parameters": {
+                                "filename": filename,
+                                "content": code_content.strip()
+                            }
+                        })
+                    else:
+                        # Otherwise use the filename with the determined file_type
+                        logger.info(f"Creating file with name: {filename} and type: {file_type}")
+                        tool_requests.append({
+                            "tool_name": "create_file",
+                            "parameters": {
+                                "filename": filename,
+                                "content": code_content.strip(),
+                                "file_type": file_type
+                            }
+                        })
+                    
+                    # Only create one file per request to keep things simple
+                    break
+        
         # If we still don't have tool requests but the user is clearly asking for information
         # about a specific topic, use the exact phrase from the user's message
         if not tool_requests and self.conversation_history:
@@ -216,6 +296,24 @@ class Agent:
                     break
             
             if last_user_message:
+                # NEW: Check for file creation requests
+                file_creation_phrases = [
+                    "create a file", "make a file", "generate a file",
+                    "write a script", "create a script", "make a script", 
+                    "generate a script", "implement", "code", "program"
+                ]
+                
+                for phrase in file_creation_phrases:
+                    if phrase in last_user_message.lower():
+                        # User is asking for a file to be created
+                        if "```" in response:
+                            # Response contains code blocks - already handled above
+                            pass
+                        else:
+                            # Response doesn't contain code blocks but user asked for a file
+                            logger.info("User requested file creation but no code blocks in response")
+                            # We'll rely on the code block detection above
+                
                 # Check if this is an information request
                 info_phrases = ["about", "information on", "tell me about", "what is", "who is", "wanna know"]
                 has_info_phrase = False
@@ -279,15 +377,15 @@ class Agent:
             
             if tool_section_start != -1:
                 if end_marker == "\n\n":
-                    # For free-form formats, search for double newline after the start marker
+                    # For free-form thinking, find the next paragraph break
                     tool_section_end = response.find(end_marker, tool_section_start + len(start_marker))
-                    if tool_section_end == -1:  # If no double newline, go to end of text
+                    if tool_section_end == -1:
                         tool_section_end = len(response)
                 else:
-                    # For explicit end markers
+                    # For explicit end tags
                     tool_section_end = response.find(end_marker, tool_section_start)
                     if tool_section_end == -1:
-                        continue  # Skip if no matching end marker
+                        continue
                 
                 tool_section = response[tool_section_start:tool_section_end + len(end_marker)]
                 response = response.replace(tool_section, "")
@@ -631,9 +729,21 @@ class Agent:
             - web_search: Search the web for information
               Parameters: {"query": "search query string"}
             
-            IMPORTANT: Always use the EXACT query that the user provides. Do NOT modify, correct, or expand the user's query.
-            For example, if the user asks about "Claude Sonnet 3.7", you must search for "Claude Sonnet 3.7" exactly,
-            not "Claude 3.5 Sonnet" or any other variant.
+            - create_file: Create a file in the OUTPUTS directory
+              Parameters: {"filename": "name of the file", "content": "content to write to the file", "file_type": "optional file extension"}
+              The file_type parameter is optional. If provided, it should be the extension without a dot (e.g., "txt", "md", "py", "json", etc.)
+              If file_type is not provided, the filename should include the extension or .txt will be used as default.
+            
+            You can use multiple tools in sequence if needed. For complex tasks, you may first search for information with web_search,
+            then use create_file to save the findings or generate content based on the search results.
+            
+            IMPORTANT FOR WEB SEARCH: Always use the EXACT query that the user provides. Do NOT modify, correct, or expand the user's query.
+            
+            IMPORTANT FOR FILE CREATION:
+            - Choose descriptive filenames that reflect the content
+            - Include appropriate file extensions for the content type
+            - Write well-formatted content appropriate for the file type
+            - For code files, ensure proper syntax and include comments
             
             If you don't need to use any tools, just respond normally.
             """
