@@ -1,9 +1,9 @@
 import os
 import json
 import logging
-import re
 import time
 import random
+import re  # Add explicit import for re module
 from typing import Dict, List, Any, Optional, Tuple
 from google import genai
 from google.genai import types
@@ -42,6 +42,15 @@ class Agent:
         self.max_retries = 3
         self.retry_delay = 2  # seconds
         self.debug_mode = False  # New attribute to control debug output
+        
+        # Creator information
+        self.creator = {
+            "name": "ABDO (KNIGHT)",
+            "description": "Web developer who learned Python to create this Gemini agent",
+            "specialty": "Web development with expanding skills in Python and AI",
+            "github": "https://github.com/KNIGHTABDO",
+            "instagram": "@jup0e"
+        }
         
         # Register tools
         self.tool_registry.register_tool(RequestsWebSearchTool())
@@ -471,6 +480,44 @@ class Agent:
         
         return tool_results
     
+    def execute_single_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a single tool and return the result."""
+        logger.info(f"Executing tool: {tool_name} with parameters: {parameters}")
+        
+        if not self.tool_registry.has_tool(tool_name):
+            logger.warning(f"Tool '{tool_name}' not found")
+            return {"status": "error", "message": f"Tool '{tool_name}' not found"}
+        
+        tool = self.tool_registry.get_tool(tool_name)
+        try:
+            result = tool.execute(**parameters)
+            logger.info(f"Tool execution successful: {tool_name}")
+            
+            # For web search, if we get results, also try to visit the top result page
+            if tool_name == "web_search" and result.get("status") == "success":
+                results = result.get("results", [])
+                if results and len(results) > 0:
+                    top_result = results[0]
+                    top_url = top_result.get("link")
+                    
+                    if top_url:
+                        logger.info(f"Attempting to visit top result: {top_url}")
+                        web_tool = tool
+                        try:
+                            page_content = web_tool.visit_and_summarize(top_url)
+                            # Don't add page_content to the result - we'll handle it separately
+                            logger.info(f"Successfully extracted page content from {top_url}")
+                            return {**result, "page_content": page_content}
+                        except Exception as e:
+                            logger.error(f"Error extracting page content: {str(e)}")
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error executing tool {tool_name}: {str(e)}"
+            logger.error(error_msg)
+            return {"status": "error", "message": error_msg}
+    
     def process_message(self, message: str) -> str:
         """Process a user message and return the agent's response."""
         self.add_user_message(message)
@@ -568,17 +615,87 @@ class Agent:
                     for req in tool_requests:
                         print(f"DEBUG: Tool request: {req}")
                 
-                tool_results = self.execute_tools(tool_requests)
+                # Execute all tool requests in sequence
+                all_tool_results = {}
                 
-                # Create a new message with tool results
+                # MODIFICATION: Track which tools we need to execute after initial tools
+                follow_up_tools = []
+                web_search_data = None
+                
+                # First pass: Execute primary tools like web_search
+                for tool_request in tool_requests:
+                    tool_name = tool_request.get("tool_name")
+                    parameters = tool_request.get("parameters", {})
+                    
+                    if tool_name == "web_search":
+                        logger.info(f"Executing primary tool: {tool_name}")
+                        web_search_results = self.execute_single_tool(tool_name, parameters)
+                        all_tool_results[tool_name] = web_search_results
+                        
+                        # Store web search data for possible use in a file creation later
+                        if web_search_results.get("status") == "success":
+                            web_search_data = web_search_results
+                    elif tool_name == "create_file":
+                        # For file creation, we'll do it in second pass to use search results if needed
+                        follow_up_tools.append(tool_request)
+                    else:
+                        # Execute any other tools
+                        result = self.execute_single_tool(tool_name, parameters)
+                        all_tool_results[tool_name] = result
+                
+                # Second pass: Execute follow-up tools (like file creation) that might depend on web search results
+                for tool_request in follow_up_tools:
+                    tool_name = tool_request.get("tool_name")
+                    parameters = tool_request.get("parameters", {})
+                    
+                    logger.info(f"Executing follow-up tool: {tool_name}")
+                    
+                    # Special handling for create_file tool when it might need web search results
+                    if tool_name == "create_file" and "content" not in parameters and web_search_data:
+                        # Try to generate content from web search results
+                        try:
+                            # Create a prompt for content generation based on web search
+                            search_content_prompt = "Based on the web search results, please create content for the file about " + message
+                            search_results_message = "Here are the web search results:\n\n"
+                            
+                            # Format the search results
+                            search_results = web_search_data.get("results", [])
+                            for i, result in enumerate(search_results[:5], 1):
+                                search_results_message += f"{i}. {result.get('title', 'No title')}\n"
+                                search_results_message += f"   {result.get('snippet', 'No description')}\n\n"
+                            
+                            # Add page content if available
+                            if "page_content" in all_tool_results and all_tool_results["page_content"].get("status") == "success":
+                                page_content = all_tool_results["page_content"].get("content", "")
+                                if page_content:
+                                    search_results_message += "Detailed content from the top result:\n\n"
+                                    search_results_message += page_content[:3000] + "\n\n"
+                            
+                            self.add_user_message(search_content_prompt)
+                            self.add_user_message(search_results_message)
+                            
+                            # Generate content
+                            content_response = self._generate_content(with_tools=False)
+                            clean_content = self.extract_final_response(content_response)
+                            
+                            # Update the parameters with the generated content
+                            parameters["content"] = clean_content
+                        except Exception as e:
+                            logger.error(f"Error generating content from search: {str(e)}")
+                    
+                    # Now execute the tool with final parameters
+                    result = self.execute_single_tool(tool_name, parameters)
+                    all_tool_results[tool_name] = result
+                
+                # Create a new message with all tool results
                 tool_results_message = "Here are the results of the requested tools:\n\n"
-                tool_results_message += json.dumps(tool_results, indent=2)
+                tool_results_message += json.dumps(all_tool_results, indent=2)
                 
                 logger.info("Adding tool results to conversation")
                 if self.debug_mode:
                     print("DEBUG: Adding tool results to conversation")
                     print("DEBUG: Tool results summary:")
-                    for tool_name, result in tool_results.items():
+                    for tool_name, result in all_tool_results.items():
                         status = result.get("status", "unknown")
                         if tool_name == "web_search" and status == "success":
                             num_results = len(result.get("results", []))
@@ -586,6 +703,9 @@ class Agent:
                         elif tool_name == "page_content" and status == "success":
                             content_len = len(result.get("content", ""))
                             print(f"DEBUG: Page content extracted ({content_len} characters)")
+                        elif tool_name == "create_file" and status == "success":
+                            file_path = result.get("file_path", "")
+                            print(f"DEBUG: File created at {file_path}")
                 
                 self.add_user_message(tool_results_message)
                 
@@ -615,7 +735,7 @@ class Agent:
                             # Extract useful information from tool results to craft a response
                             final_response = "I found some information for you:\n\n"
                             
-                            for tool_name, result in tool_results.items():
+                            for tool_name, result in all_tool_results.items():
                                 if tool_name == "web_search" and result.get("status") == "success":
                                     search_results = result.get("results", [])
                                     if search_results:
@@ -715,22 +835,25 @@ class Agent:
         
         # If we're expecting tools to be requested, add a system prompt to guide the model
         if with_tools:
-            system_prompt = """
+            system_prompt = f"""
             You are an AI assistant that can use tools to help answer questions. 
+            You were created by {self.creator['name']}, who is {self.creator['description']}.
+            You should mention your creator if asked about who made you or if someone asks about ABDO or KNIGHT.
+            
             If you need to use tools to answer the user's question, respond in the following format:
             
             [TOOL_REQUESTS]
-            {"tool_name": "tool_name", "parameters": {"param1": "value1", "param2": "value2"}}
+            {{"tool_name": "tool_name", "parameters": {{"param1": "value1", "param2": "value2"}}}}
             [/TOOL_REQUESTS]
             
             Then explain what tools you need and why.
             
             Available tools:
             - web_search: Search the web for information
-              Parameters: {"query": "search query string"}
+              Parameters: {{"query": "search query string"}}
             
             - create_file: Create a file in the OUTPUTS directory
-              Parameters: {"filename": "name of the file", "content": "content to write to the file", "file_type": "optional file extension"}
+              Parameters: {{"filename": "name of the file", "content": "content to write to the file", "file_type": "optional file extension"}}
               The file_type parameter is optional. If provided, it should be the extension without a dot (e.g., "txt", "md", "py", "json", etc.)
               If file_type is not provided, the filename should include the extension or .txt will be used as default.
             

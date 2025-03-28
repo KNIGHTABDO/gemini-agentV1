@@ -1,30 +1,46 @@
-# Gemini 2.5 Pro AI Agent
+# 🤖 Gemini 2.5 Pro AI Agent
 
-A powerful local AI agent that leverages Google's Gemini 2.5 Pro model with chat history support, tool integration, and web search capabilities. This agent can search the web, extract page content, and provide comprehensive responses to user queries.
+A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO) that leverages Google's Gemini 2.5 Pro model with chat history support, tool integration, web search capabilities, and file creation tools. This agent can search the web, extract page content, create files, and provide comprehensive responses to user queries.
 
-## Features
+<div align="center">
+  <img src="https://api.dicebear.com/7.x/bottts/svg?seed=gemini&backgroundColor=1e1e2e" width="200" alt="Gemini Agent Logo">
+</div>
 
-- Runs locally using Python
-- Maintains conversation history
-- Robust error handling with automatic retries
-- Tool execution framework with web search capabilities
-- Extracts and visits web pages to gather detailed information
-- Debug mode for detailed logging
-- Clean response formatting by removing "thinking" sections
-- Command-line interface for easy interaction
+## ✨ Features
 
-## Prerequisites
+- 🏠 **Local Execution** - Runs locally using Python
+- 💬 **Chat History** - Maintains conversation history
+- 🔄 **Error Handling** - Robust error handling with automatic retries
+- 🧰 **Tool Integration** - Flexible tool execution framework
+- 🌐 **Web Search** - Searches multiple engines (Google, Bing, DuckDuckGo)
+- 📄 **Page Content Extraction** - Visits web pages to gather detailed information
+- 📝 **File Creation** - Generates files with code, text, or other content
+- 🐞 **Debug Mode** - Toggle detailed logging for troubleshooting
+- 💻 **CLI and Web Interface** - Choose your preferred interface
+- 📸 **Screenshots** - Captures search results and web pages
+
+## 🚀 Latest Enhancements
+
+- **Creator Identity**: The agent now knows it was created by ABDO (KNIGHT)
+- **Web Interface**: Beautiful dark-themed web UI using Gradio
+- **File Creation Tool**: Generate code and content files from conversations
+- **Multi-Engine Search**: Searches across Google, Bing, and DuckDuckGo
+- **Improved Error Recovery**: Better fallback strategies when things go wrong
+- **Page Content Extraction**: Gets detailed text from top search results
+- **Screenshot Gallery**: View results visually in the web interface
+
+## 📋 Prerequisites
 
 - Python 3.8 or higher
 - Google Gemini API key (can be obtained from [Google AI Studio](https://ai.google.dev/))
 
-## Installation
+## 📦 Installation
 
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/gemini-2.0pro-agent.git
-cd gemini-2.0pro-agent
+git clone https://github.com/yourusername/gemini-agentV1.git
+cd gemini-agentV1
 ```
 
 2. Install the required packages:
@@ -33,7 +49,7 @@ cd gemini-2.0pro-agent
 pip install -r requirements.txt
 ```
 
-## Usage
+## 🔧 Usage
 
 1. Set your Gemini API key as an environment variable:
 
@@ -47,19 +63,26 @@ export GEMINI_API_KEY=your-api-key-here
 
 Alternatively, you can provide the API key when prompted.
 
-2. Run the agent:
+2. Run the agent using the command line:
 
 ```bash
 python main.py
 ```
 
-3. Interact with the agent through the command line:
+3. Or launch the web interface:
+
+```bash
+python main.py --web
+```
+
+4. Interact with the agent:
    - Type your questions or commands
-   - Type `debug` to toggle debug mode (shows detailed logs in console)
+   - Type `debug` to toggle debug mode (shows detailed logs)
    - Type `reset` to clear the conversation history
+   - Type `web` to launch the web interface from command line
    - Type `exit` or `quit` to end the session
 
-## How It Works
+## 🧠 How It Works
 
 The agent processes user input in the following way:
 
@@ -70,16 +93,26 @@ The agent processes user input in the following way:
 5. The agent extracts the main response, removing any "thinking" sections or tool request markers
 6. The final, clean response is presented to the user
 
-### Web Search Capabilities
+### 🔍 Web Search Capabilities
 
 The agent includes powerful web search functionality:
 
-- Can search using popular search engines
+- Searches multiple engines (Google, Bing, DuckDuckGo)
 - Automatically extracts and processes content from top search results
 - Stores screenshots of search results and page content for reference
 - Handles failures gracefully with fallback mechanisms
 
-## Extending with New Tools
+### 📁 File Creation
+
+The agent can create files based on your requests:
+
+- Code files with appropriate syntax highlighting
+- Text documents with formatted content
+- Markdown files for documentation
+- JSON, XML, and other data formats
+- Files are saved in the OUTPUTS directory
+
+## 🛠️ Extending with New Tools
 
 The project uses a flexible tool architecture that makes it easy to add new capabilities:
 
@@ -107,15 +140,26 @@ class WeatherTool(Tool):
 self.tool_registry.register_tool(WeatherTool())
 ```
 
-## Project Structure
+## 📂 Project Structure
 
-- `main.py` - Entry point that sets up the command-line interface
+- `main.py` - Entry point with CLI and web interface launching
 - `agent.py` - Core agent implementation with Gemini integration
 - `tools.py` - Tool implementations and registry
-- `page_screenshots/` - Stores HTML snapshots of visited web pages
-- `search_screenshots/` - Stores HTML snapshots of search results
+- `web_interface.py` - Gradio-based web UI
+- `OUTPUTS/` - Where generated files are saved
+- `page_screenshots/` - Stores screenshots of visited web pages
+- `search_screenshots/` - Stores screenshots of search results
 
-## Contributing
+## 👨‍💻 About the Creator
+
+This project was created by ABDO (KNIGHT), a web developer who expanded into Python development to build this AI agent. The agent represents a fusion of web development expertise with new Python skills to create a powerful AI assistant.
+
+### Connect with ABDO
+
+- GitHub: [KNIGHTABDO](https://github.com/KNIGHTABDO)
+- Instagram: [@jup0e](https://www.instagram.com/jup0e)
+
+## 🤝 Contributing
 
 Contributions are welcome! Here's how you can help:
 
@@ -125,6 +169,6 @@ Contributions are welcome! Here's how you can help:
 4. Push to the branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
-## License
+## 📝 License
 
 MIT
