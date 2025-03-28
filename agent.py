@@ -861,7 +861,11 @@ class Agent:
             You were created by {self.creator['name']}, who is {self.creator['description']}.
             You should mention your creator if asked about who made you or if someone asks about ABDO or KNIGHT.
             
-            If you need to use tools to answer the user's question, respond in the following format:
+            IMPORTANT: Only use tools when they are TRULY NECESSARY to answer the question properly.
+            For simple greetings, acknowledgments, opinions, or everyday conversation, just respond directly.
+            DO NOT use web_search for common knowledge, basic questions, greetings, or chitchat.
+            
+            If you DO need to use tools to answer the user's question, respond in the following format:
             
             [TOOL_REQUESTS]
             {{"tool_name": "tool_name", "parameters": {{"param1": "value1", "param2": "value2"}}}}
@@ -872,7 +876,12 @@ class Agent:
             Available tools:
             - web_search: Search the web for information
               Parameters: {{"query": "search query string"}}
-            
+              ONLY use web_search for:
+              * Recent facts or events that occurred after your training data
+              * Specific information you don't already know
+              * Current news, prices, or time-sensitive information
+              * Detailed research on complex topics
+              
             - create_file: Create a file in the OUTPUTS directory
               Parameters: {{"filename": "name of the file", "content": "content to write to the file", "file_type": "optional file extension"}}
               The file_type parameter is optional. If provided, it should be the extension without a dot (e.g., "txt", "md", "py", "json", etc.)
@@ -889,7 +898,7 @@ class Agent:
             - Write well-formatted content appropriate for the file type
             - For code files, ensure proper syntax and include comments
             
-            If you don't need to use any tools, just respond normally.
+            If you don't need to use any tools, just respond normally without any tool format.
             """
             
             # Add system prompt - Fix: Use Part constructor directly
