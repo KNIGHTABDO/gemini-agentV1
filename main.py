@@ -19,9 +19,13 @@ import argparse
 import sys
 from getpass import getpass
 from agent import Agent
+from dotenv import load_dotenv
 
 def setup_api_key():
     """Set up the API key if not already in environment variables."""
+    # Try to load API key from .env file first
+    load_dotenv()
+    
     api_key = os.environ.get("GEMINI_API_KEY")
     
     if not api_key:

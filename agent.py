@@ -22,6 +22,7 @@ import time
 import random
 import re  # Add explicit import for re module
 from typing import Dict, List, Any, Optional, Tuple
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.genai.errors import ServerError, APIError
@@ -48,6 +49,9 @@ logger = logging.getLogger("agent")
 class Agent:
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Gemini agent."""
+        # Load environment variables from .env file first
+        load_dotenv()
+        
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable must be set or provided explicitly")
