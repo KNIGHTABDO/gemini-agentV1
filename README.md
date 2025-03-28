@@ -32,7 +32,7 @@ A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO
 ## 📋 Prerequisites
 
 - Python 3.8 or higher
-- Google Gemini API key (can be obtained from [Google AI Studio](https://ai.google.dev/))
+- Google Gemini API key (can be obtained from [Google AI Studio](https://aistudio.google.com/))
 
 ## 📦 Installation
 
