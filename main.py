@@ -1,3 +1,19 @@
+"""
+Gemini AI Agent V1
+-----------------
+A powerful local AI agent built with Google's Gemini 2.5 Pro model
+
+Created by: ABDO (KNIGHT)
+Repository: https://github.com/KNIGHTABDO/gemini-agentV1
+Contact: 
+    - GitHub: https://github.com/KNIGHTABDO
+    - Instagram: @jup0e
+
+Version: 1.0.0
+Date: March 28, 2025
+License: MIT
+"""
+
 import os
 import argparse
 import sys

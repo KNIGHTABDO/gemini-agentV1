@@ -1,3 +1,20 @@
+"""
+Gemini AI Agent V1 - Agent Module
+---------------------------------
+Core agent implementation with Gemini integration, tool handling, 
+and conversation management.
+
+Created by: ABDO (KNIGHT)
+Repository: https://github.com/KNIGHTABDO/gemini-agentV1
+Contact: 
+    - GitHub: https://github.com/KNIGHTABDO
+    - Instagram: @jup0e
+
+Version: 1.0.0
+Date: March 28, 2025
+License: MIT
+"""
+
 import os
 import json
 import logging

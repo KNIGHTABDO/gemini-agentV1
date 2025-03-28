@@ -39,7 +39,7 @@ A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/gemini-agentV1.git
+git clone https://github.com/KNIGHTABDO/gemini-agentV1.git
 cd gemini-agentV1
 ```
 
