@@ -995,35 +995,146 @@ class FileReaderTool:
     def _read_pptx(file_path: str) -> Dict[str, Union[str, List[str]]]:
         """Read content from a PPTX file."""
         if not PPTX_AVAILABLE:
+            logger.error("python-pptx library not available")
             return {"status": "error", "message": "python-pptx not available. Install with 'pip install python-pptx'"}
         
         try:
-            presentation = Presentation(file_path)
-            slide_texts = []
+            logger.info(f"Attempting to read PPTX file: {file_path}")
             
-            # Extract text from each slide
-            for i, slide in enumerate(presentation.slides):
-                texts = []
-                for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        texts.append(shape.text)
+            # Add detailed logging for debugging purposes
+            import os
+            if not os.path.exists(file_path):
+                logger.error(f"File not found: {file_path}")
+                return {"status": "error", "message": f"File not found: {file_path}"}
+            
+            file_size = os.path.getsize(file_path)
+            logger.info(f"PPTX file size: {file_size} bytes")
+            
+            # Try the default method to read the presentation
+            try:
+                from pptx import Presentation
+                presentation = Presentation(file_path)
                 
-                if texts:
-                    slide_text = "\n".join(texts)
-                    slide_texts.append(f"--- Slide {i+1} ---\n{slide_text}")
-            
-            return {
-                "status": "success",
-                "content": "\n\n".join(slide_texts),
-                "metadata": {
-                    "num_slides": len(presentation.slides),
-                    "slides_with_text": len(slide_texts)
+                # Log successful load
+                logger.info(f"Successfully loaded presentation with {len(presentation.slides)} slides")
+                
+                slide_texts = []
+                slide_count = len(presentation.slides)
+                
+                # Extract text from each slide
+                for i, slide in enumerate(presentation.slides):
+                    logger.info(f"Processing slide {i+1} of {slide_count}")
+                    texts = []
+                    
+                    # Process all shapes in the slide
+                    shape_count = len(slide.shapes)
+                    logger.info(f"Slide {i+1} has {shape_count} shapes")
+                    
+                    for shape in slide.shapes:
+                        # Log shape type
+                        shape_type = type(shape).__name__
+                        
+                        # Check if it's a text-containing shape
+                        if hasattr(shape, "text"):
+                            if shape.text and len(shape.text.strip()) > 0:
+                                texts.append(shape.text)
+                                logger.info(f"Found text in {shape_type}: {shape.text[:50]}...")
+                            else:
+                                logger.info(f"Empty text in {shape_type}")
+                        else:
+                            logger.info(f"No text attribute in shape type: {shape_type}")
+                    
+                    # Also try to get text from text frames if available
+                    if hasattr(slide, "shapes") and hasattr(slide.shapes, "text_frame"):
+                        if slide.shapes.text_frame and hasattr(slide.shapes.text_frame, "text"):
+                            texts.append(slide.shapes.text_frame.text)
+                    
+                    # For placeholders (like title, content)
+                    for shape in slide.placeholders:
+                        if hasattr(shape, "text") and shape.text:
+                            texts.append(shape.text)
+                    
+                    # Assemble the slide text
+                    if texts:
+                        slide_text = "\n".join(texts)
+                        slide_texts.append(f"--- Slide {i+1} of {slide_count} ---\n{slide_text}")
+                    else:
+                        slide_texts.append(f"--- Slide {i+1} of {slide_count} ---\n[No text content found]")
+                
+                return {
+                    "status": "success",
+                    "content": "\n\n".join(slide_texts),
+                    "metadata": {
+                        "num_slides": slide_count,
+                        "slides_with_text": len([t for t in slide_texts if "[No text content found]" not in t])
+                    }
                 }
-            }
+            
+            except Exception as e:
+                logger.error(f"Error using python-pptx Presentation: {str(e)}")
+                logger.error("Falling back to alternative method...")
+                
+                # Alternative extraction method for problematic files
+                try:
+                    import zipfile
+                    import re
+                    from xml.etree import ElementTree
+                    
+                    # PPTX files are ZIP archives containing XML
+                    slide_texts = []
+                    with zipfile.ZipFile(file_path) as zf:
+                        # Find all slide XML files
+                        slide_files = [f for f in zf.namelist() if f.startswith('ppt/slides/slide')]
+                        slide_files.sort()  # Ensure correct order
+                        
+                        logger.info(f"Found {len(slide_files)} slide files using zipfile method")
+                        
+                        # Process each slide
+                        for i, slide_file in enumerate(slide_files):
+                            try:
+                                with zf.open(slide_file) as f:
+                                    slide_xml = f.read()
+                                    
+                                # Parse the XML
+                                root = ElementTree.fromstring(slide_xml)
+                                
+                                # Extract text using XPath-like search (simplified)
+                                texts = []
+                                # The XML namespace in PPTX files
+                                ns = {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
+                                
+                                # Find all text elements
+                                for text_elem in root.findall('.//a:t', ns):
+                                    if text_elem.text and text_elem.text.strip():
+                                        texts.append(text_elem.text)
+                                
+                                if texts:
+                                    slide_text = "\n".join(texts)
+                                    slide_texts.append(f"--- Slide {i+1} ---\n{slide_text}")
+                                else:
+                                    slide_texts.append(f"--- Slide {i+1} ---\n[No text content found]")
+                                    
+                            except Exception as xml_error:
+                                logger.error(f"Error processing slide XML {slide_file}: {str(xml_error)}")
+                                slide_texts.append(f"--- Slide {i+1} ---\n[Error extracting content]")
+                    
+                    return {
+                        "status": "success",
+                        "content": "\n\n".join(slide_texts),
+                        "metadata": {
+                            "num_slides": len(slide_files),
+                            "slides_with_text": len([t for t in slide_texts if "[No text content found]" not in t]),
+                            "extraction_method": "zipfile fallback"
+                        }
+                    }
+                    
+                except Exception as fallback_error:
+                    logger.error(f"Fallback extraction method failed: {str(fallback_error)}")
+                    raise  # Re-raise to be caught by the outer exception handler
         
         except Exception as e:
             error_msg = f"Error reading PPTX file: {str(e)}"
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
             return {
                 "status": "error",
                 "message": error_msg

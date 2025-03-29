@@ -264,7 +264,7 @@ class WebInterface:
                             file_upload = gr.File(
                                 label="Upload Document",
                                 file_types=[".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv"],
-                                type="file"
+                                type="filepath"
                             )
                             upload_button = gr.Button("📄 Upload & Analyze", elem_classes="custom-button button-secondary")
                     
