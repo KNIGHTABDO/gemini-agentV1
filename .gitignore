@@ -117,3 +117,10 @@ search_screenshots/
 # API keys and secrets
 .env
 *.pem
+
+# UPLOADS FOLDER FOR ANALYSIS
+UPLOADS/
+
+
+# FILES CREATION OUTPUTS
+OUTPUTS/

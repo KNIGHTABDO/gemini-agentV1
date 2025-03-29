@@ -27,7 +27,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ServerError, APIError
 
-from tools import ToolRegistry, RequestsWebSearchTool, FileCreationTool  # Added import for FileCreationTool
+from tools import ToolRegistry, RequestsWebSearchTool, FileCreationTool, DocumentReaderTool  # Added import for DocumentReaderTool
 
 # Configure logging - only log to file by default, not to console
 file_handler = logging.FileHandler("agent_debug.log")
@@ -76,6 +76,7 @@ class Agent:
         # Register tools
         self.tool_registry.register_tool(RequestsWebSearchTool())
         self.tool_registry.register_tool(FileCreationTool())  # Register the new file creation tool
+        self.tool_registry.register_tool(DocumentReaderTool())  # Register the DocumentReaderTool
     
     def toggle_debug_mode(self) -> str:
         """Toggle debug mode on/off and update logger configuration."""
@@ -887,6 +888,17 @@ class Agent:
               The file_type parameter is optional. If provided, it should be the extension without a dot (e.g., "txt", "md", "py", "json", etc.)
               If file_type is not provided, the filename should include the extension or .txt will be used as default.
             
+            - document_reader: Read and analyze document files
+              Parameters: {{"file_path": "absolute path to the file"}}
+              Use this tool when a user uploads a document file and wants information or analysis of its contents.
+              Supported document formats:
+              * PDF (.pdf)
+              * Text files (.txt, .text)
+              * Word documents (.docx)
+              * PowerPoint presentations (.pptx)
+              * Excel spreadsheets (.xlsx)
+              * CSV files (.csv)
+            
             You can use multiple tools in sequence if needed. For complex tasks, you may first search for information with web_search,
             then use create_file to save the findings or generate content based on the search results.
             
@@ -897,6 +909,12 @@ class Agent:
             - Include appropriate file extensions for the content type
             - Write well-formatted content appropriate for the file type
             - For code files, ensure proper syntax and include comments
+            
+            IMPORTANT FOR DOCUMENT READER:
+            - Use this tool when the user has uploaded a document file and needs analysis of its content
+            - Provide thoughtful analysis of document content based on the user's questions
+            - For longer documents, summarize key sections and respond to specific questions about the content
+            - Handle structured data appropriately (tables from Excel/CSV, slides from PowerPoint, etc.)
             
             If you don't need to use any tools, just respond normally without any tool format.
             """

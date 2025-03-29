@@ -5,3 +5,7 @@ python-dotenv>=0.15.0
 httpx>=0.21.0
 playwright>=1.35.0
 gradio>=4.0.0
+PyPDF2>=3.0.0
+docx2txt>=0.8
+python-pptx>=0.6.21
+openpyxl>=3.1.0

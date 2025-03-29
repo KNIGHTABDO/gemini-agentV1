@@ -2,6 +2,10 @@ import os
 import sys
 import gradio as gr
 from agent import Agent
+import shutil
+import tempfile
+from pathlib import Path
+import time
 
 class WebInterface:
     def __init__(self, api_key=None):
@@ -254,6 +258,16 @@ class WebInterface:
                     gr.Markdown("Ask questions or give commands to interact with Gemini Agent.")
                     chatbot.render()
                     
+                    # File upload component
+                    with gr.Group():
+                        with gr.Row():
+                            file_upload = gr.File(
+                                label="Upload Document",
+                                file_types=[".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv"],
+                                type="file"
+                            )
+                            upload_button = gr.Button("📄 Upload & Analyze", elem_classes="custom-button button-secondary")
+                    
                     # Input area with buttons
                     with gr.Group():
                         msg = gr.Textbox(
@@ -342,6 +356,17 @@ class WebInterface:
                 gallery
             )
             
+            # Connect the file upload handler
+            upload_button.click(
+                self.handle_file_upload,
+                inputs=[file_upload, msg, chatbot],
+                outputs=[msg, chatbot]
+            ).then(
+                self.refresh_screenshots,
+                None,
+                gallery
+            )
+            
             clear_btn.click(lambda: "", None, [msg], queue=False)
             
             reset_btn.click(
@@ -389,6 +414,67 @@ class WebInterface:
         
         # Return up to 5 most recent screenshots
         return screenshots[:5]
+    
+    def process_uploaded_file(self, file):
+        """Process an uploaded file and return the path."""
+        if file is None:
+            return None
+            
+        # Create a directory for uploaded files if it doesn't exist
+        uploads_dir = "UPLOADS"
+        if not os.path.exists(uploads_dir):
+            os.makedirs(uploads_dir)
+            
+        # Get file info
+        file_path = file.name
+        file_name = os.path.basename(file_path)
+        
+        # Generate a destination path with timestamp to avoid conflicts
+        timestamp = str(int(time.time()))
+        dest_filename = f"{timestamp}_{file_name}"
+        dest_path = os.path.join(uploads_dir, dest_filename)
+        
+        # Copy the file to our uploads directory
+        shutil.copy2(file_path, dest_path)
+        
+        return dest_path
+    
+    def handle_file_upload(self, file, message, history):
+        """Handle file upload and process the message."""
+        if file is None:
+            return "Please upload a file first.", history
+            
+        # Process the uploaded file
+        try:
+            file_path = self.process_uploaded_file(file)
+            if not file_path:
+                return "Failed to process the uploaded file.", history
+                
+            # Check file extension
+            _, ext = os.path.splitext(file_path)
+            ext = ext.lower()
+            
+            supported_extensions = [".pdf", ".txt", ".text", ".docx", ".pptx", ".xlsx", ".csv"]
+            if ext not in supported_extensions:
+                return f"Unsupported file type: {ext}. Supported formats: {', '.join(supported_extensions)}", history
+                
+            # Add information about the uploaded file to the message
+            file_info_message = f"I've uploaded a file: {os.path.basename(file_path)} (Located at: {file_path}). {message}"
+            
+            # Add user message
+            user_msg = {"role": "user", "content": file_info_message}
+            
+            # Get bot response
+            bot_response = self.agent.process_message(file_info_message)
+            bot_msg = {"role": "assistant", "content": bot_response}
+            
+            # Return updated history
+            history = history + [user_msg, bot_msg]
+            return "", history
+            
+        except Exception as e:
+            error_msg = f"Error processing file: {str(e)}"
+            return error_msg, history
 
 def main():
     """Main function to launch the web interface."""

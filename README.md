@@ -1,6 +1,6 @@
 # 🤖 Gemini 2.5 Pro AI Agent
 
-A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO) that leverages Google's Gemini 2.5 Pro model with chat history support, tool integration, web search capabilities, and file creation tools. This agent can search the web, extract page content, create files, and provide comprehensive responses to user queries.
+A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO) that leverages Google's Gemini 2.5 Pro model with chat history support, tool integration, web search capabilities, document analysis, and file creation tools. This agent can search the web, extract page content, analyze various document types, create files, and provide comprehensive responses to user queries.
 
 <div align="center">
   <img src="https://api.dicebear.com/7.x/bottts/svg?seed=gemini&backgroundColor=1e1e2e" width="200" alt="Gemini Agent Logo">
@@ -15,6 +15,7 @@ A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO
 - 🌐 **Web Search** - Searches multiple engines (Google, Bing, DuckDuckGo)
 - 📄 **Page Content Extraction** - Visits web pages to gather detailed information
 - 📝 **File Creation** - Generates files with code, text, or other content
+- 📚 **Document Analysis** - Reads and analyzes PDF, TXT, DOCX, PPTX, XLSX, and CSV files
 - 🐞 **Debug Mode** - Toggle detailed logging for troubleshooting
 - 💻 **CLI and Web Interface** - Choose your preferred interface
 - 📸 **Screenshots** - Captures search results and web pages
@@ -24,6 +25,7 @@ A powerful local AI agent built by [ABDO (KNIGHT)](https://github.com/KNIGHTABDO
 - **Creator Identity**: The agent now knows it was created by ABDO (KNIGHT)
 - **Web Interface**: Beautiful dark-themed web UI using Gradio
 - **File Creation Tool**: Generate code and content files from conversations
+- **Document Reader Tool**: Analyze PDF, TXT, DOCX, PPTX, XLSX, and CSV files
 - **Multi-Engine Search**: Searches across Google, Bing, and DuckDuckGo
 - **Improved Error Recovery**: Better fallback strategies when things go wrong
 - **Page Content Extraction**: Gets detailed text from top search results
@@ -172,3 +174,73 @@ Contributions are welcome! Here's how you can help:
 ## 📝 License
 
 MIT
+
+### 📚 Document Analysis
+
+The agent can read and analyze various document formats:
+
+- **Supported Formats**:
+
+  - PDF files (.pdf) - For reading articles, papers, and reports
+  - Text files (.txt, .text) - For simple text content
+  - Word documents (.docx) - For formatted text documents
+  - PowerPoint presentations (.pptx) - For slides and presentations
+  - Excel spreadsheets (.xlsx) - For tabular data and workbooks
+  - CSV files (.csv) - For structured data in comma-separated format
+
+- **Usage Methods**:
+  - **Web Interface**: Upload documents using the file upload component
+  - **Command Line**: Drag and drop file paths directly into the terminal
+- **Analysis Features**:
+  - Extract and summarize content from documents
+  - Answer questions about document content
+  - Provide metadata information (page count, slide count, etc.)
+  - Handle different encodings and formatting
+  - Present structured data in a readable format
+
+## 🔧 How To Use Document Analysis
+
+### Via Web Interface
+
+1. Launch the web interface:
+
+   ```bash
+   python main.py --web
+   ```
+
+2. Use the file upload component:
+
+   - Click "Browse" to select a document (PDF, DOCX, TXT, XLSX, PPTX, CSV)
+   - Optionally add a specific question about the document in the message box
+   - Click "Upload & Analyze"
+
+3. The agent will:
+   - Process the document
+   - Extract text content based on the file type
+   - Provide information about its contents
+   - Answer any specific questions you've asked
+
+### Via Command Line
+
+1. Launch the command-line interface:
+
+   ```bash
+   python main.py
+   ```
+
+2. Drag and drop a document file directly into the terminal, or type/paste the full file path
+
+3. The agent will detect the file path, validate the file type, and analyze its contents
+
+4. You can ask follow-up questions about the document's content in subsequent messages
+
+### Example Document Analysis Queries
+
+- "Summarize this PDF document for me"
+- "Extract the key points from this presentation"
+- "What are the total sales figures in this Excel file?"
+- "Find all mentions of 'climate change' in this document"
+- "Convert this CSV data into a markdown table"
+- "What are the main sections of this document?"
+
+All analyzed files are safely stored in the UPLOADS directory for future reference.

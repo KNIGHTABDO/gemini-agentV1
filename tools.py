@@ -8,6 +8,7 @@ import urllib.parse
 import random
 from datetime import datetime
 import re
+import shutil
 
 # Configure logging - only log to file by default, not to console
 file_handler = logging.FileHandler("agent_debug.log")
@@ -20,6 +21,38 @@ logging.basicConfig(
     handlers=[file_handler]
 )
 logger = logging.getLogger("tools")
+
+# Try to import PyPDF2 for PDF file processing
+try:
+    import PyPDF2
+    PYPDF2_AVAILABLE = True
+except ImportError:
+    logger.warning("PyPDF2 not installed. Will not be able to read PDF files.")
+    PYPDF2_AVAILABLE = False
+
+# Try to import docx2txt for DOCX file processing
+try:
+    import docx2txt
+    DOCX2TXT_AVAILABLE = True
+except ImportError:
+    logger.warning("docx2txt not installed. Will not be able to read DOCX files.")
+    DOCX2TXT_AVAILABLE = False
+
+# Try to import python-pptx for PPTX file processing
+try:
+    from pptx import Presentation
+    PPTX_AVAILABLE = True
+except ImportError:
+    logger.warning("python-pptx not installed. Will not be able to read PPTX files.")
+    PPTX_AVAILABLE = False
+
+# Try to import openpyxl for XLSX file processing
+try:
+    import openpyxl
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    logger.warning("openpyxl not installed. Will not be able to read XLSX files.")
+    OPENPYXL_AVAILABLE = False
 
 # Try to import Playwright (but we'll have an alternative)
 try:
@@ -717,3 +750,405 @@ class ToolRegistry:
     def list_tools(self) -> Dict[str, str]:
         """List all available tools with their descriptions."""
         return {name: tool.description for name, tool in self.tools.items()}
+
+
+class DocumentReaderTool(Tool):
+    """Tool for reading the content of various document file formats."""
+    
+    @property
+    def name(self) -> str:
+        return "document_reader"
+    
+    @property
+    def description(self) -> str:
+        return "Read the content of various document files to analyze them and answer questions about them."
+    
+    def execute(self, file_path: str) -> Dict[str, Any]:
+        """Read the content of a document file.
+        
+        Args:
+            file_path: The path to the file to read
+            
+        Returns:
+            A dictionary with the status of the operation and the content of the file
+        """
+        logger.info(f"Reading document: {file_path}")
+        
+        # Validate file exists
+        if not os.path.exists(file_path):
+            error_msg = f"File not found: {file_path}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+        
+        # Get file extension
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        # Validate file type
+        supported_extensions = [".pdf", ".txt", ".text", ".docx", ".pptx", ".xlsx", ".csv"]
+        if ext not in supported_extensions:
+            error_msg = f"Unsupported file type: {ext}. Supported formats: {', '.join(supported_extensions)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+            
+        try:
+            # Use the FileReaderTool to read the file content
+            result = FileReaderTool.read_file(file_path)
+            
+            if result["status"] == "success":
+                logger.info(f"Successfully read document: {file_path}")
+                
+                # Get file metadata
+                file_stat = os.stat(file_path)
+                file_size = file_stat.st_size
+                file_modified = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Add file info to result
+                result["file_info"] = {
+                    "path": file_path,
+                    "name": os.path.basename(file_path),
+                    "type": ext[1:].upper(),  # Remove dot and capitalize
+                    "size": file_size,
+                    "size_formatted": self._format_file_size(file_size),
+                    "modified": file_modified
+                }
+                
+            return result
+                
+        except Exception as e:
+            error_msg = f"Error reading document: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Format file size in human-readable format."""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024 or unit == 'GB':
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024
+
+
+class FileReaderTool:
+    """Static utility class for reading various document file formats."""
+    
+    @staticmethod
+    def read_file(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read the content of a document file based on its extension.
+        
+        Supported formats:
+        - PDF (.pdf) - Requires PyPDF2
+        - Text (.txt, .text) - Plain text
+        - Word (.docx) - Requires docx2txt
+        - PowerPoint (.pptx) - Requires python-pptx
+        - Excel (.xlsx) - Requires openpyxl
+        - CSV (.csv) - Native Python
+        """
+        logger.info(f"Reading file: {file_path}")
+        
+        if not os.path.exists(file_path):
+            return {"status": "error", "message": "File not found."}
+        
+        # Check file extension
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        # Process based on file type
+        if ext == ".pdf":
+            return FileReaderTool._read_pdf(file_path)
+        elif ext in [".txt", ".text"]:
+            return FileReaderTool._read_txt(file_path)
+        elif ext == ".docx":
+            return FileReaderTool._read_docx(file_path)
+        elif ext == ".pptx":
+            return FileReaderTool._read_pptx(file_path)
+        elif ext == ".xlsx":
+            return FileReaderTool._read_xlsx(file_path)
+        elif ext == ".csv":
+            return FileReaderTool._read_csv(file_path)
+        else:
+            return {"status": "error", "message": f"Unsupported file type: {ext}"}
+    
+    @staticmethod
+    def _read_pdf(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from a PDF file."""
+        if not PYPDF2_AVAILABLE:
+            return {"status": "error", "message": "PyPDF2 not available. Install with 'pip install PyPDF2'"}
+        
+        try:
+            with open(file_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                num_pages = len(reader.pages)
+                text = []
+                
+                for i, page in enumerate(reader.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text.append(f"--- Page {i+1} of {num_pages} ---\n{page_text}")
+                
+                return {
+                    "status": "success",
+                    "content": "\n\n".join(text),
+                    "metadata": {
+                        "num_pages": num_pages,
+                        "has_text": len(text) > 0
+                    }
+                }
+        
+        except Exception as e:
+            error_msg = f"Error reading PDF file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    @staticmethod
+    def _read_txt(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from a TXT file."""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                # Count number of lines
+                num_lines = content.count('\n') + 1
+                
+                return {
+                    "status": "success",
+                    "content": content,
+                    "metadata": {
+                        "num_lines": num_lines,
+                        "size_chars": len(content)
+                    }
+                }
+        
+        except UnicodeDecodeError:
+            # Try different encodings if UTF-8 fails
+            try:
+                with open(file_path, "r", encoding="latin-1") as f:
+                    content = f.read()
+                    num_lines = content.count('\n') + 1
+                    
+                    return {
+                        "status": "success",
+                        "content": content,
+                        "metadata": {
+                            "num_lines": num_lines,
+                            "size_chars": len(content),
+                            "encoding": "latin-1"
+                        }
+                    }
+            except Exception as e:
+                error_msg = f"Error reading TXT file with alternative encoding: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg
+                }
+        
+        except Exception as e:
+            error_msg = f"Error reading TXT file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    @staticmethod
+    def _read_docx(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from a DOCX file."""
+        if not DOCX2TXT_AVAILABLE:
+            return {"status": "error", "message": "docx2txt not available. Install with 'pip install docx2txt'"}
+        
+        try:
+            # Extract text from the docx
+            text = docx2txt.process(file_path)
+            
+            # Count paragraphs (non-empty lines)
+            paragraphs = [p for p in text.split('\n') if p.strip()]
+            
+            return {
+                "status": "success",
+                "content": text,
+                "metadata": {
+                    "num_paragraphs": len(paragraphs),
+                    "size_chars": len(text)
+                }
+            }
+        
+        except Exception as e:
+            error_msg = f"Error reading DOCX file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    @staticmethod
+    def _read_pptx(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from a PPTX file."""
+        if not PPTX_AVAILABLE:
+            return {"status": "error", "message": "python-pptx not available. Install with 'pip install python-pptx'"}
+        
+        try:
+            presentation = Presentation(file_path)
+            slide_texts = []
+            
+            # Extract text from each slide
+            for i, slide in enumerate(presentation.slides):
+                texts = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        texts.append(shape.text)
+                
+                if texts:
+                    slide_text = "\n".join(texts)
+                    slide_texts.append(f"--- Slide {i+1} ---\n{slide_text}")
+            
+            return {
+                "status": "success",
+                "content": "\n\n".join(slide_texts),
+                "metadata": {
+                    "num_slides": len(presentation.slides),
+                    "slides_with_text": len(slide_texts)
+                }
+            }
+        
+        except Exception as e:
+            error_msg = f"Error reading PPTX file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    @staticmethod
+    def _read_xlsx(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from an XLSX file."""
+        if not OPENPYXL_AVAILABLE:
+            return {"status": "error", "message": "openpyxl not available. Install with 'pip install openpyxl'"}
+        
+        try:
+            workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            sheet_contents = []
+            
+            # Process each sheet
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                rows = []
+                
+                # Get data (limit to first 100 rows and 20 columns for performance)
+                row_count = 0
+                for row in sheet.iter_rows(max_row=100, max_col=20, values_only=True):
+                    # Format the row and handle None values
+                    formatted_row = [str(cell) if cell is not None else "" for cell in row]
+                    rows.append("\t".join(formatted_row))
+                    row_count += 1
+                
+                if rows:
+                    sheet_text = f"--- Sheet: {sheet_name} ---\n" + "\n".join(rows)
+                    sheet_contents.append(sheet_text)
+            
+            return {
+                "status": "success",
+                "content": "\n\n".join(sheet_contents),
+                "metadata": {
+                    "num_sheets": len(workbook.sheetnames),
+                    "sheet_names": workbook.sheetnames
+                }
+            }
+        
+        except Exception as e:
+            error_msg = f"Error reading XLSX file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    @staticmethod
+    def _read_csv(file_path: str) -> Dict[str, Union[str, List[str]]]:
+        """Read content from a CSV file."""
+        try:
+            import csv
+            
+            rows = []
+            total_rows = 0
+            
+            with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
+                csv_reader = csv.reader(csvfile)
+                header = next(csv_reader, None)
+                
+                if header:
+                    rows.append("\t".join(header))
+                
+                # Read up to 100 rows to avoid memory issues with large files
+                for i, row in enumerate(csv_reader):
+                    if i >= 100:
+                        break
+                    rows.append("\t".join(row))
+                    total_rows = i + 1
+            
+            return {
+                "status": "success",
+                "content": "\n".join(rows),
+                "metadata": {
+                    "total_rows": total_rows + 1,  # Add 1 for header
+                    "has_header": header is not None,
+                    "num_columns": len(header) if header else 0,
+                    "preview_note": "Showing first 100 rows only" if total_rows >= 100 else "Showing all rows"
+                }
+            }
+            
+        except UnicodeDecodeError:
+            # Try different encodings if UTF-8 fails
+            try:
+                rows = []
+                total_rows = 0
+                
+                with open(file_path, 'r', newline='', encoding='latin-1') as csvfile:
+                    csv_reader = csv.reader(csvfile)
+                    header = next(csv_reader, None)
+                    
+                    if header:
+                        rows.append("\t".join(header))
+                    
+                    for i, row in enumerate(csv_reader):
+                        if i >= 100:
+                            break
+                        rows.append("\t".join(row))
+                        total_rows = i + 1
+                
+                return {
+                    "status": "success",
+                    "content": "\n".join(rows),
+                    "metadata": {
+                        "total_rows": total_rows + 1,
+                        "has_header": header is not None,
+                        "num_columns": len(header) if header else 0,
+                        "encoding": "latin-1",
+                        "preview_note": "Showing first 100 rows only" if total_rows >= 100 else "Showing all rows"
+                    }
+                }
+            except Exception as e:
+                error_msg = f"Error reading CSV file with alternative encoding: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg
+                }
+        
+        except Exception as e:
+            error_msg = f"Error reading CSV file: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }

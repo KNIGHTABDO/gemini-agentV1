@@ -17,9 +17,12 @@ License: MIT
 import os
 import argparse
 import sys
+import re
 from getpass import getpass
 from agent import Agent
 from dotenv import load_dotenv
+import shutil
+import time
 
 def setup_api_key():
     """Set up the API key if not already in environment variables."""
@@ -34,6 +37,47 @@ def setup_api_key():
         os.environ["GEMINI_API_KEY"] = api_key
     
     return api_key
+
+def process_file_path(file_path):
+    """Process a file path (potentially from drag-and-drop) and return the cleaned path."""
+    import time
+    
+    # Strip quotes that might be added when dragging files to terminal
+    file_path = file_path.strip().strip('"\'')
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        return None, f"File not found: {file_path}"
+    
+    # Check if it's a file and not a directory
+    if not os.path.isfile(file_path):
+        return None, f"Not a file: {file_path}"
+    
+    # Check file extension
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+    
+    supported_extensions = [".pdf", ".txt", ".text", ".docx", ".pptx", ".xlsx", ".csv"]
+    if ext not in supported_extensions:
+        return None, f"Unsupported file type: {ext}. Supported formats: {', '.join(supported_extensions)}"
+    
+    # Create UPLOADS directory if it doesn't exist
+    uploads_dir = "UPLOADS"
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir)
+    
+    # Generate a destination path
+    filename = os.path.basename(file_path)
+    timestamp = int(time.time())
+    dest_filename = f"{timestamp}_{filename}"
+    dest_path = os.path.join(uploads_dir, dest_filename)
+    
+    # Copy the file to our uploads directory
+    try:
+        shutil.copy2(file_path, dest_path)
+        return dest_path, None
+    except Exception as e:
+        return None, f"Error copying file: {str(e)}"
 
 def main():
     parser = argparse.ArgumentParser(description='Gemini AI Agent with Chat History & Tools')
@@ -114,6 +158,31 @@ def main():
                         print("📦 Please install it with: pip install gradio")
                     else:
                         print(f"❌ Error launching web interface: {str(e)}")
+                    continue
+            
+            # Check if input looks like a file path (common file extensions or full paths)
+            if (os.path.exists(user_input) or 
+                re.search(r'["\']?.*\.(pdf|txt|text|docx|pptx|xlsx|csv)["\']?', user_input, re.IGNORECASE)):
+                
+                # Process the potential file path
+                processed_path, error = process_file_path(user_input)
+                
+                if error:
+                    print(f"\n❌ {error}")
+                    continue
+                
+                # Add context about the file to the message
+                message = f"I've uploaded a file: {os.path.basename(processed_path)} (Located at: {processed_path}). Please analyze this document."
+                
+                print(f"\n📄 File uploaded successfully: {os.path.basename(processed_path)}")
+                print("\n🧠 Analyzing document...")
+                
+                try:
+                    response = agent.process_message(message)
+                    print(f"\n🤖 Gemini: {response}")
+                    continue
+                except Exception as e:
+                    print(f"\n❌ Error analyzing document: {str(e)}")
                     continue
             
             # Always show "Thinking..." regardless of debug mode
